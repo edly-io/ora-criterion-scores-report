@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if block_name %}{{ block_name }} — {% endif %}Criterion scores</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #f7f8f9; color: #1a1a1a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 32px 24px; }
+    .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+    h1 { font-size: 1.8rem; margin: 0 0 6px; font-weight: 600; }
+    .subtitle { color: #707070; margin: 0 0 4px; max-width: 760px; }
+    .block-name { color: #454545; font-weight: 600; margin: 0 0 24px; }
+    .download {
+      display: inline-block; padding: 9px 16px; border: 1px solid #c4c4c4; border-radius: 6px;
+      background: #fff; color: #454545; text-decoration: none; white-space: nowrap; font-weight: 500;
+    }
+    .download:hover { background: #f0f0f0; }
+    .table-wrap { overflow-x: auto; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 16px 18px; text-align: left; vertical-align: top; border-bottom: 1px solid #eee; }
+    thead th { background: #f7f8f9; border-bottom: 1px solid #e0e0e0; }
+    tbody tr:last-child td { border-bottom: none; }
+    .crit-label { font-weight: 700; color: #1a1a1a; display: block; }
+    .crit-prompt { font-weight: 400; color: #707070; font-size: 0.85rem; margin-top: 6px; max-width: 220px; }
+    .learner-name { font-weight: 700; color: #1a1a1a; display: block; }
+    .learner-username { color: #8c8c8c; font-size: 0.85rem; }
+    .cell { text-align: center; }
+    .badge { display: inline-block; padding: 5px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; }
+    .badge.demonstrated { background: #e3f3e6; color: #178341; }
+    .badge.not_yet { background: #fbe6e6; color: #c0392b; }
+    .badge.ungraded { color: #b0b0b0; }
+    .dash { color: #9a9a9a; }
+    .empty { padding: 40px; text-align: center; color: #707070; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1>Criterion scores</h1>
+        <p class="subtitle">Score per sub-sub-competency, taken from the assessment rubric. The course gradebook can't show this breakdown.</p>
+        {% if block_name %}<p class="block-name">{{ block_name }}</p>{% endif %}
+      </div>
+      <a class="download" href="{{ csv_download_url }}">Download CSV</a>
+    </div>
+
+    {% if not criteria %}
+      <div class="empty">This assignment has no rubric criteria.</div>
+    {% else %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Learner</th>
+              {% for criterion in criteria %}
+                <th>
+                  <span class="crit-label">{{ criterion.label }}</span>
+                  {% if criterion.prompt %}<span class="crit-prompt">{{ criterion.prompt }}</span>{% endif %}
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>
+                  <span class="learner-name">{{ row.name }}</span>
+                  <span class="learner-username">{{ row.username }}</span>
+                </td>
+                {% for cell in row.cells %}
+                  <td class="cell">
+                    {% if cell.state == no_submission_state %}
+                      <span class="dash">&mdash;</span>
+                    {% elif cell.state == ungraded_state %}
+                      <span class="badge ungraded">&ndash;</span>
+                    {% else %}
+                      <span class="badge {{ cell.state }}">{{ cell.label }}</span>
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% empty %}
+              <tr><td class="empty" colspan="{{ criteria|length|add:1 }}">No learners are enrolled in this course.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>
