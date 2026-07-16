@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="ora-criterion-scores-report",
-    version="0.1.0",
+    version="0.2.0",
     description="Open edX plugin: per-block ORA criterion-scores report for course staff.",
     long_description=open("README.rst", encoding="utf-8").read(),
     long_description_content_type="text/x-rst",

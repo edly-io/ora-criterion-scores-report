@@ -8,6 +8,6 @@ The report is launched from a small links panel injected into the Instructor
 Dashboard "Open Responses" tab.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 default_app_config = "ora_criterion_scores.apps.OraCriterionScoresConfig"

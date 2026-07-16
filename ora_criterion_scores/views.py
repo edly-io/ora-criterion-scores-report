@@ -55,6 +55,17 @@ def _get_ora_block(course_key, usage_id):
         raise Http404() from error
 
 
+def _unit_name(block):
+    """Return the display name of the block's parent unit, or empty string."""
+    parent_id = getattr(block, "parent", None)
+    if parent_id is None:
+        return ""
+    try:
+        return modulestore().get_item(parent_id).display_name or ""
+    except ItemNotFoundError:
+        return ""
+
+
 def _csv_response(block, report):
     """Return the report matrix as a text/csv attachment."""
     response = HttpResponse(content_type="text/csv")
@@ -94,6 +105,7 @@ def ora_criterion_scores(request, course_id, usage_id):
         return _csv_response(block, report)
 
     context = Context({
+        "unit_name": _unit_name(block),
         "block_name": block.display_name,
         "criteria": report["criteria"],
         "rows": report["rows"],

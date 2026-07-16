@@ -57,8 +57,16 @@ edx-platform so they run standalone too.
 Scope / assumptions
 -------------------
 
-* Cells reflect the **staff** assessment. ORAs graded only by peer/self will
-  show blank cells (no staff score). Effective-grade resolution
-  (staff-override → staff → peer-median → self) is intentionally out of scope
-  for this version.
+* Cells reflect the **effective** assessment, mirroring the ORA grade page:
+  a staff assessment (including a staff override) wins; otherwise the peer
+  median mapped back to the authored option label(s) — when a median falls
+  between options, both authored labels are shown slash-joined, exactly as ORA
+  does; otherwise the self assessment. Criteria with no score on the effective
+  assessment (e.g. a peer step still awaiting reviews) are left blank.
+* No labels are hard-coded: cell text is always the authored option label, and
+  colour is derived from where the option's points fall within that
+  criterion's own range (top / bottom / middle) — so any point scale works.
+* Peer medians assume the default ``median`` grading strategy. If
+  ``ENABLE_ORA_PEER_CONFIGURABLE_GRADING`` is on with a per-block strategy,
+  extend ``_effective_selections`` to pass the block's peer requirements.
 * Access is limited to users with staff-level access to the course.

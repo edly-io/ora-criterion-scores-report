@@ -31,11 +31,18 @@
     .learner-username { color: #8c8c8c; font-size: 0.85rem; }
     .cell { text-align: center; }
     .badge { display: inline-block; padding: 5px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; }
-    .badge.demonstrated { background: #e3f3e6; color: #178341; }
-    .badge.not_yet { background: #fbe6e6; color: #c0392b; }
+    .badge.staff { background: #e3f3e6; color: #178341; }
+    .badge.self { background: #e6f1fb; color: #185fa5; }
+    .badge.peer { background: #efedfe; color: #534ab7; }
     .badge.ungraded { color: #b0b0b0; }
     .dash { color: #9a9a9a; }
     .empty { padding: 40px; text-align: center; color: #707070; }
+    .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 0.82rem; color: #707070; }
+    .legend .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+    .legend .swatch.staff { background: #e3f3e6; }
+    .legend .swatch.self { background: #e6f1fb; }
+    .legend .swatch.peer { background: #efedfe; }
+    .legend .mark { color: #9a9a9a; margin-right: 6px; }
   </style>
 </head>
 <body>
@@ -44,7 +51,7 @@
       <div>
         <h1>Criterion scores</h1>
         <p class="subtitle">Score per sub-sub-competency, taken from the assessment rubric. The course gradebook can't show this breakdown.</p>
-        {% if block_name %}<p class="block-name">{{ block_name }}</p>{% endif %}
+        <p class="block-name">{% if unit_name %}<strong>{{ unit_name }}</strong> &ndash; {% endif %}{{ block_name }}</p>
       </div>
       <a class="download" href="{{ csv_download_url }}">Download CSV</a>
     </div>
@@ -89,6 +96,13 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="legend">
+        <span><span class="swatch staff"></span>Staff</span>
+        <span><span class="swatch peer"></span>Peer</span>
+        <span><span class="swatch self"></span>Self</span>
+        <span><span class="mark">&ndash;</span>Submitted, not yet scored</span>
+        <span><span class="mark">&mdash;</span>No submission</span>
       </div>
     {% endif %}
   </div>

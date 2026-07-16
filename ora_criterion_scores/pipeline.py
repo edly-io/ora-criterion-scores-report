@@ -46,6 +46,7 @@ class AddCriterionScoresPanel(PipelineStep):
             return
 
         course_id = str(course.id)
+        store = modulestore()
 
         def url_for(location):
             return reverse(
@@ -53,8 +54,21 @@ class AddCriterionScoresPanel(PipelineStep):
                 kwargs={"course_id": course_id, "usage_id": str(location)},
             )
 
-        blocks = modulestore().get_items(course.id, qualifiers={"category": "openassessment"})
-        items = build_items(blocks, url_for)
+        parents = {}
+
+        def unit_name_for(block):
+            parent_id = block.parent
+            if parent_id is None:
+                return ""
+            if parent_id not in parents:
+                try:
+                    parents[parent_id] = store.get_item(parent_id).display_name or ""
+                except Exception:  # pylint: disable=broad-except
+                    parents[parent_id] = ""
+            return parents[parent_id]
+
+        blocks = store.get_items(course.id, qualifiers={"category": "openassessment"})
+        items = build_items(blocks, url_for, unit_name_for)
         if not items:
             return
 
