@@ -263,6 +263,19 @@ def test_get_cells_never_submitted(cells_env):
     assert "b1" in dates[1]
 
 
+def test_get_cells_writes_dates_in_the_browser_zone(cells_env):
+    cells_env.submissions = [_submission("anon-1", "b1", "sub-1", BASE.replace(hour=3))]
+    cells_env.selected = {"sub-1": {"c1": _selection(1, "staff")}}
+
+    _, utc_dates = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75)
+    _, honolulu = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75, "Pacific/Honolulu")
+    _, bad_zone = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75, "Nope/Nope")
+
+    assert utc_dates[1]["b1"]["date"] == "10/20/2026"
+    assert honolulu[1]["b1"]["date"] == "10/19/2026"
+    assert bad_zone[1]["b1"]["date"] == "10/20/2026"
+
+
 def test_get_cells_later_submission_wins(cells_env):
     cells_env.submissions = [
         _submission("anon-1", "b1", "later", BASE + timedelta(days=3)),
@@ -404,15 +417,15 @@ def test_build_report_collects_columns_and_all_learners(monkeypatch):
     monkeypatch.setattr(data, "learners_queryset", lambda key: users)
     seen = {}
 
-    def fake_cells(cols, blocks, page_users, key, threshold):
-        seen["args"] = (cols, blocks, [u.id for u in page_users], key, threshold)
+    def fake_cells(cols, blocks, page_users, key, threshold, tz=None):
+        seen["args"] = (cols, blocks, [u.id for u in page_users], key, threshold, tz)
         return {1: [None, None], 2: [None, None]}, {1: {}, 2: {"b1": {"date": "10/20/2026", "note": ""}}}
 
     monkeypatch.setattr(data, "get_cells", fake_cells)
 
-    report_data = data.build_report("course-key")
+    report_data = data.build_report("course-key", "Asia/Karachi")
 
-    assert seen["args"][2:] == ([1, 2], "course-key", 75)
+    assert seen["args"][2:] == ([1, 2], "course-key", 75, "Asia/Karachi")
     assert report_data["columns"] == columns
     assert [learner["username"] for learner in report_data["learners"]] == ["a", "b"]
     assert report_data["learners"][1]["dates"] == {"b1": {"date": "10/20/2026", "note": ""}}

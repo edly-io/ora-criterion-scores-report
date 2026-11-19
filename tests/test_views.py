@@ -172,7 +172,7 @@ def test_csv_download():
     rows = list(csv.reader(io.StringIO(response.content.decode())))
     assert rows[0] == ["Competency", "", "", "Course Title", "Course Title"]
     assert rows[1] == ["Assessment Name", "", "", "Reflection", "Reflection"]
-    assert rows[2] == ["Learner", "Username", "Email", "Date taken", "Criterion 1"]
+    assert rows[2] == ["Learner", "Username", "Email", "Attempt Date", "Criterion 1"]
     assert rows[3] == ["'=Evil", "u1", "u1@example.com", "10/20/2026", "100% (Demonstrated)"]
     assert len(rows) == 4
 

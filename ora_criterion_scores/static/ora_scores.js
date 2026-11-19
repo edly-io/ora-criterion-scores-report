@@ -108,7 +108,7 @@
       while (j < payload.columns.length && payload.columns[j].competency === competency) { j += 1; }
       var comp = el('th', 'edl-ora-competency');
       comp.appendChild(el('span', 'edl-ora-group-label', competency));
-      // One extra "Date taken" column per assessment inside this competency.
+      // One extra "Attempt Date" column per assessment inside this competency.
       var assessmentCount = starts.slice(cStart, j).filter(Boolean).length;
       comp.colSpan = (j - cStart) + assessmentCount;
       comp.scope = 'colgroup';
@@ -122,13 +122,13 @@
       while (i < payload.columns.length && payload.columns[i].block_id === blockId) { i += 1; }
       var group = el('th', 'edl-ora-group');
       group.appendChild(el('span', 'edl-ora-group-label', payload.columns[start].assessment));
-      group.colSpan = (i - start) + 1;  // plus the "Date taken" column
+      group.colSpan = (i - start) + 1;  // plus the "Attempt Date" column
       group.scope = 'colgroup';
       row1.appendChild(group);
     }
     payload.columns.forEach(function (c, idx) {
       if (starts[idx]) {
-        var dateHead = el('th', 'edl-ora-date-head edl-ora-group-start', 'Date taken');
+        var dateHead = el('th', 'edl-ora-date-head edl-ora-group-start', 'Attempt Date');
         dateHead.scope = 'col';
         row2.appendChild(dateHead);
       }
@@ -221,6 +221,17 @@
     els.footer.appendChild(pager);
   }
 
+  // The viewer's IANA time zone (for example "America/Chicago"). The server writes every date in it.
+  function browserZone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+  }
+
+  function withZone(url) {
+    var zone = browserZone();
+    if (!url || !zone) { return url; }
+    return url + (url.indexOf('?') === -1 ? '?' : '&') + 'tz=' + encodeURIComponent(zone);
+  }
+
   function fetchPage() {
     var host = root();
     if (!host) { return; }
@@ -230,7 +241,7 @@
     state.requestId += 1;
     var requestId = state.requestId;
     var params = new URLSearchParams({
-      page: state.page, page_size: state.pageSize, q: state.q, assessment: state.assessment
+      page: state.page, page_size: state.pageSize, q: state.q, assessment: state.assessment, tz: browserZone()
     });
     els.status.textContent = 'Loading...';
 
@@ -277,7 +288,7 @@
       'Scores for each rubric criterion in every open response assessment. Demonstrated means ' +
       config.threshold + '% or more.'));
     var download = el('a', 'btn btn-primary edl-ora-download', 'Download All Scores (CSV)');
-    download.href = config.csvUrl || '#';
+    download.href = withZone(config.csvUrl) || '#';
     host.appendChild(download);
     host.appendChild(el('div', 'edl-ora-table-root'));
     section.appendChild(host);  // below the native ORA list

@@ -36,6 +36,11 @@ def _course_key_for_staff(request, course_id):
     return course_key
 
 
+def _tz_param(request):
+    """Return the browser's IANA time zone name from ``?tz=`` (``""`` if absent). It is validated when used."""
+    return request.GET.get("tz", "").strip()
+
+
 def _int_param(request, name, default, minimum=1, maximum=None):
     """Return an integer query param, clamped to ``[minimum, maximum]``, or ``default`` if invalid."""
     try:
@@ -53,7 +58,8 @@ def ora_scores_data(request, course_id):
     Return one page of learners and their ORA scores as JSON.
 
     Query params: ``page`` (default 1), ``page_size`` (default 10, max 100),
-    ``q`` (name, username or email) and ``assessment`` (a block id, limits the columns).
+    ``q`` (name, username or email), ``assessment`` (a block id, limits the columns)
+    and ``tz`` (the browser's IANA time zone, dates are written in it, UTC if missing).
     """
     course_key = _course_key_for_staff(request, course_id)
     threshold = data.threshold()
@@ -62,6 +68,7 @@ def ora_scores_data(request, course_id):
     page = _int_param(request, "page", 1)
     query = request.GET.get("q", "").strip()
     assessment = request.GET.get("assessment", "").strip()
+    tz = _tz_param(request)
 
     all_columns, blocks_by_id = data.get_columns(course_key)
     assessments = []
@@ -75,7 +82,7 @@ def ora_scores_data(request, course_id):
     num_pages = max(1, -(-total // page_size))
     page = min(page, num_pages)
     page_users = list(learners[(page - 1) * page_size:page * page_size])
-    cells, dates = data.get_cells(columns, blocks_by_id, page_users, course_key, threshold)
+    cells, dates = data.get_cells(columns, blocks_by_id, page_users, course_key, threshold, tz)
 
     return JsonResponse({
         "assessments": assessments,
@@ -102,7 +109,7 @@ def ora_scores_data(request, course_id):
 def ora_scores_csv(request, course_id):
     """Return every ORA criterion score for the course as a CSV download."""
     course_key = _course_key_for_staff(request, course_id)
-    report_data = data.build_report(course_key)
+    report_data = data.build_report(course_key, _tz_param(request))
 
     response = HttpResponse(content_type="text/csv")
     filename = "ora_assessment_scores_{}_{}.csv".format(slugify(str(course_key)), date.today().isoformat())

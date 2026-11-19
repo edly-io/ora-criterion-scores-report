@@ -12,8 +12,8 @@ What the table shows
 --------------------
 
 * One group of columns per ORA, in course outline order. The first column of
-  each group is a shaded **Date taken** column with the date the learner
-  submitted (``MM/DD/YYYY``, UTC). A learner who has not submitted shows ``-``.
+  each group is a shaded **Attempt Date** column with the date the learner
+  submitted (``MM/DD/YYYY``, in the viewer's browser time zone). A learner who has not submitted shows ``-``.
 * Under the date, a note says where the score came from: ``Staff score``,
   ``Peer score`` or ``Self score``. A learner who submitted but has no score yet
   shows ``Awaiting grade``. The note is on screen only and is not in the CSV.
@@ -21,7 +21,7 @@ What the table shows
   criterion (a binary rubric gives 0% or 100%), with the same rounding as the
   Auto Assessments tab in ``tutor-contrib-edl``. **Demonstrated** (green) means
   the percent is at or above the threshold, **Not Demonstrated** (yellow) means
-  below it, and grey **No score** means there is no score.
+  below it, and grey **No Attempt Yet** means there is no score.
 * Search by name, username or email, filter by assessment, paging and page size.
 
 How it works
@@ -53,7 +53,7 @@ CSV layout
 
 Row 1 is ``Competency`` (the course title), row 2 is ``Assessment Name``, row 3
 is ``Learner, Username, Email`` followed by the criterion names. Each ORA group
-starts with a ``Date taken`` column (rows 1 and 2 repeat the competency and the
+starts with a ``Attempt Date`` column (rows 1 and 2 repeat the competency and the
 assessment name above it). Then there is one row per learner. Score cells read
 ``75% (Demonstrated)``. The date cell is empty when the learner has not
 submitted.
@@ -106,7 +106,7 @@ Scope / assumptions
   a staff assessment (including a staff override) wins; otherwise the peer
   median mapped back to the authored option; otherwise the self assessment.
   Criteria with no score on the effective assessment (e.g. a peer step still
-  awaiting reviews) show No score.
+  awaiting reviews) show No Attempt Yet.
 * Criteria without options (feedback only) are not columns.
 * Peer medians assume the default ``median`` grading strategy. If
   ``ENABLE_ORA_PEER_CONFIGURABLE_GRADING`` is on with a per-block strategy,

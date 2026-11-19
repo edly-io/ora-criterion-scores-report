@@ -224,7 +224,7 @@ def _note_for(selections):
     return _NOTE_BY_SOURCE.get(next(iter(selections.values()))["source"], "")
 
 
-def get_cells(columns, blocks_by_id, users, course_key, current_threshold):
+def get_cells(columns, blocks_by_id, users, course_key, current_threshold, tz=None):
     """
     Return ``(cells, dates)`` for ``users``.
 
@@ -260,7 +260,7 @@ def get_cells(columns, blocks_by_id, users, course_key, current_threshold):
         for user_id, submission in block_submissions.items():
             selections = selected.get(submission["uuid"], {})
             dates[user_id][block_id] = report.date_entry(
-                report.format_date(submission["submitted_at"]), _note_for(selections)
+                report.format_date(submission["submitted_at"], tz), _note_for(selections)
             )
             for index, column in enumerate(columns):
                 if column["block_id"] != block_id:
@@ -281,11 +281,11 @@ def learner_row(user, cells, dates):
     return {"name": name, "username": user.username, "email": user.email, "cells": cells, "dates": dates}
 
 
-def build_report(course_key):
+def build_report(course_key, tz=None):
     """Return ``{"columns": [...], "learners": [...]}`` for every active enrollee (used by the CSV)."""
     columns, blocks_by_id = get_columns(course_key)
     users = list(learners_queryset(course_key))
-    cells, dates = get_cells(columns, blocks_by_id, users, course_key, threshold())
+    cells, dates = get_cells(columns, blocks_by_id, users, course_key, threshold(), tz)
     return {
         "columns": columns,
         "learners": [learner_row(user, cells[user.id], dates[user.id]) for user in users],

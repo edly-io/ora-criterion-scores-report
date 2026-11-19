@@ -67,6 +67,24 @@ def test_format_date_naive_is_treated_as_utc():
     assert report.format_date(datetime(2026, 1, 5, 0, 0)) == "01/05/2026"
 
 
+def test_format_date_in_browser_zone_moves_the_day():
+    late_utc = datetime(2026, 10, 15, 3, 30, tzinfo=timezone.utc)
+    assert report.format_date(late_utc, "UTC") == "10/15/2026"
+    assert report.format_date(late_utc, "Pacific/Honolulu") == "10/14/2026"
+    assert report.format_date(late_utc, "Asia/Karachi") == "10/15/2026"
+    assert report.format_date(datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc), "Asia/Karachi") == "10/16/2026"
+
+
+def test_format_date_naive_value_with_zone_is_read_as_utc():
+    assert report.format_date(datetime(2026, 10, 15, 3, 30), "Pacific/Honolulu") == "10/14/2026"
+
+
+def test_format_date_unknown_or_empty_zone_falls_back_to_utc():
+    value = datetime(2026, 10, 15, 3, 30, tzinfo=timezone.utc)
+    for bad in (None, "", "Not/AZone", "../etc/passwd", "x" * 200, 5):
+        assert report.format_date(value, bad) == "10/15/2026"
+
+
 def test_format_date_none_is_empty():
     assert report.format_date(None) == ""
 
@@ -118,7 +136,7 @@ def test_build_rows_two_assessments():
         "Assessment Name", "", "", "Reflection", "Reflection", "Reflection", "Pitch", "Pitch",
     ]
     assert rows[2] == [
-        "Learner", "Username", "Email", "Date taken", "Criterion 1", "Criterion 2", "Date taken", "Clarity",
+        "Learner", "Username", "Email", "Attempt Date", "Criterion 1", "Criterion 2", "Attempt Date", "Clarity",
     ]
     assert rows[3] == [
         "Syed Sajjad", "sajjad", "s@example.com", "10/20/2026", "100% (Demonstrated)", "0% (Not Demonstrated)", "", "",
@@ -142,7 +160,7 @@ def test_build_rows_escapes_formula_characters():
     rows = report.build_rows(data)
     assert rows[0][3:] == ["'=Course", "'=Course"]
     assert rows[1][3:] == ["'+A", "'+A"]
-    assert rows[2][3:] == ["Date taken", "'@C"]
+    assert rows[2][3:] == ["Attempt Date", "'@C"]
     assert rows[3][0] == "'-Name"
 
 
