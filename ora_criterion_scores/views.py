@@ -1,116 +1,114 @@
 """
-Views for the per-block ORA criterion-scores report.
+Views for the course-wide ORA scores table (JSON data) and CSV export.
 
-Renders a standalone, self-contained HTML page (no Mako / no LMS chrome) and a
-CSV export of the same matrix. Access is restricted to course staff.
+Both views are restricted to course staff.
 """
 
 import csv
-from importlib.resources import files
+from datetime import date
 
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, HttpResponse
-from django.template import Context, Template
+from django.http import Http404, HttpResponse, JsonResponse
 from django.utils.text import slugify
-from django.utils.translation import gettext as _
 from django.views.decorators.cache import cache_control
 from opaque_keys import InvalidKeyError
-from opaque_keys.edx.keys import CourseKey, UsageKey
+from opaque_keys.edx.keys import CourseKey
 
 from lms.djangoapps.courseware.courses import get_course_with_access
-from xmodule.modulestore.django import modulestore  # pylint: disable=wrong-import-order
-from xmodule.modulestore.exceptions import ItemNotFoundError  # pylint: disable=wrong-import-order
 
-from . import data as report_data
+from . import data
+from . import report
 
-_REPORT_TEMPLATE = None
-
-
-def _report_template():
-    """Load and cache the packaged report template as a Django Template."""
-    global _REPORT_TEMPLATE  # pylint: disable=global-statement
-    if _REPORT_TEMPLATE is None:
-        source = (
-            files("ora_criterion_scores")
-            .joinpath("templates/ora_criterion_scores/report.html")
-            .read_text(encoding="utf-8")
-        )
-        _REPORT_TEMPLATE = Template(source)
-    return _REPORT_TEMPLATE
+DEFAULT_PAGE_SIZE = 10
+MAX_PAGE_SIZE = 100
 
 
-def _get_ora_block(course_key, usage_id):
-    """Load and validate the ORA block for ``usage_id`` within ``course_key``."""
-    try:
-        usage_key = UsageKey.from_string(usage_id).map_into_course(course_key)
-    except InvalidKeyError as error:
-        raise Http404() from error
-
-    if usage_key.block_type != "openassessment":
-        raise Http404()
-
-    try:
-        return modulestore().get_item(usage_key)
-    except ItemNotFoundError as error:
-        raise Http404() from error
-
-
-def _unit_name(block):
-    """Return the display name of the block's parent unit, or empty string."""
-    parent_id = getattr(block, "parent", None)
-    if parent_id is None:
-        return ""
-    try:
-        return modulestore().get_item(parent_id).display_name or ""
-    except ItemNotFoundError:
-        return ""
-
-
-def _csv_response(block, report):
-    """Return the report matrix as a text/csv attachment."""
-    response = HttpResponse(content_type="text/csv")
-    filename = "ora_criterion_scores_{}.csv".format(slugify(block.display_name) or "report")
-    response["Content-Disposition"] = 'attachment; filename="{}"'.format(filename)
-
-    writer = csv.writer(response)
-    writer.writerow([_("Learner"), _("Username")] + [c["label"] for c in report["criteria"]])
-    for row in report["rows"]:
-        cells = [
-            "" if cell["state"] == report_data.CELL_NO_SUBMISSION else cell["label"]
-            for cell in row["cells"]
-        ]
-        writer.writerow([row["name"], row["username"]] + cells)
-    return response
-
-
-@login_required
-@cache_control(no_cache=True, no_store=True, must_revalidate=True)
-def ora_criterion_scores(request, course_id, usage_id):
-    """
-    Render the criterion-scores report for a single ORA block, or its CSV
-    export when ``?format=csv`` is supplied. Restricted to course staff.
-    """
+def _course_key_for_staff(request, course_id):
+    """Return the course key, or raise 404 / permission errors for non-staff."""
     try:
         course_key = CourseKey.from_string(course_id)
     except InvalidKeyError as error:
         raise Http404() from error
 
-    # Raises for users without staff-level access to the course.
-    get_course_with_access(request.user, "staff", course_key, depth=None)
+    # Raises for users without staff-level access to the course. No children are
+    # loaded here because get_columns loads the full course tree itself.
+    get_course_with_access(request.user, "staff", course_key)
+    return course_key
 
-    block = _get_ora_block(course_key, usage_id)
-    report = report_data.build_report(course_key, block)
 
-    if request.GET.get("format") == "csv":
-        return _csv_response(block, report)
+def _int_param(request, name, default, minimum=1, maximum=None):
+    """Return an integer query param, clamped to ``[minimum, maximum]``, or ``default`` if invalid."""
+    try:
+        value = int(request.GET.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    value = max(value, minimum)
+    return min(value, maximum) if maximum else value
 
-    context = Context({
-        "unit_name": _unit_name(block),
-        "block_name": block.display_name,
-        "criteria": report["criteria"],
-        "rows": report["rows"],
-        "csv_download_url": "{}?format=csv".format(request.path),
-        "no_submission_state": report_data.CELL_NO_SUBMISSION,
-        "ungraded_state": report_data.CELL_UNGRADED,
+
+@login_required
+@cache_control(no_cache=True, no_store=True, must_revalidate=True)
+def ora_scores_data(request, course_id):
+    """
+    Return one page of learners and their ORA scores as JSON.
+
+    Query params: ``page`` (default 1), ``page_size`` (default 10, max 100),
+    ``q`` (name, username or email) and ``assessment`` (a block id, limits the columns).
+    """
+    course_key = _course_key_for_staff(request, course_id)
+    threshold = data.threshold()
+
+    page_size = _int_param(request, "page_size", DEFAULT_PAGE_SIZE, maximum=MAX_PAGE_SIZE)
+    page = _int_param(request, "page", 1)
+    query = request.GET.get("q", "").strip()
+    assessment = request.GET.get("assessment", "").strip()
+
+    all_columns, blocks_by_id = data.get_columns(course_key)
+    assessments = []
+    for column in all_columns:
+        if column["block_id"] not in [a["id"] for a in assessments]:
+            assessments.append({"id": column["block_id"], "name": column["assessment"]})
+    columns = [c for c in all_columns if c["block_id"] == assessment] if assessment else all_columns
+
+    learners = data.learners_queryset(course_key, query)
+    total = learners.count()
+    num_pages = max(1, -(-total // page_size))
+    page = min(page, num_pages)
+    page_users = list(learners[(page - 1) * page_size:page * page_size])
+    cells, dates = data.get_cells(columns, blocks_by_id, page_users, course_key, threshold)
+
+    return JsonResponse({
+        "assessments": assessments,
+        "columns": [
+            {
+                "competency": c["competency"],
+                "block_id": c["block_id"],
+                "assessment": c["assessment"],
+                "criterion": c["criterion"],
+            }
+            for c in columns
+        ],
+        "learners": [data.learner_row(user, cells[user.id], dates[user.id]) for user in page_users],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "num_pages": num_pages,
+        "threshold": threshold,
     })
-    return HttpResponse(_report_template().render(context))
+
+
+@login_required
+@cache_control(no_cache=True, no_store=True, must_revalidate=True)
+def ora_scores_csv(request, course_id):
+    """Return every ORA criterion score for the course as a CSV download."""
+    course_key = _course_key_for_staff(request, course_id)
+    report_data = data.build_report(course_key)
+
+    response = HttpResponse(content_type="text/csv")
+    filename = "ora_assessment_scores_{}_{}.csv".format(slugify(str(course_key)), date.today().isoformat())
+    response["Content-Disposition"] = 'attachment; filename="{}"'.format(filename)
+
+    writer = csv.writer(response)
+    for row in report.build_rows(report_data):
+        writer.writerow(row)
+    return response

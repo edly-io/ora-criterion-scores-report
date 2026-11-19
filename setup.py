@@ -4,15 +4,15 @@ from setuptools import find_packages, setup
 
 setup(
     name="ora-criterion-scores-report",
-    version="0.2.0",
-    description="Open edX plugin: per-block ORA criterion-scores report for course staff.",
+    version="0.3.0",
+    description="Open edX plugin: course-wide ORA scores table with dates for course staff.",
     long_description=open("README.rst", encoding="utf-8").read(),
     long_description_content_type="text/x-rst",
     license="AGPL-3.0",
     packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,
     package_data={
-        "ora_criterion_scores": ["templates/ora_criterion_scores/*.html"],
+        "ora_criterion_scores": ["static/*.js", "static/*.css"],
     },
     python_requires=">=3.8",
     install_requires=[
@@ -20,7 +20,7 @@ setup(
         "openedx-filters",
     ],
     extras_require={
-        "test": ["pytest"],
+        "test": ["pytest", "django", "openedx-filters", "edx-opaque-keys"],
     },
     zip_safe=False,
     entry_points={
