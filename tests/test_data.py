@@ -57,7 +57,7 @@ def test_get_columns_follows_outline_order_across_blocks(monkeypatch):
     columns, blocks_by_id = data.get_columns("course-key")
 
     assert [(c["assessment"], c["criterion"], c["criterion_name"], c["max_points"]) for c in columns] == [
-        ("Pitch", "Clarity", "clarity", 4),
+        ("Pitch", "clarity", "clarity", 4),
         ("Reflection", "c1", "c1", 1),
         ("Reflection", "c2", "c2", 1),
     ]
