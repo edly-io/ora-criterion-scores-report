@@ -1,31 +1,69 @@
 ORA Criterion Scores Report
 ===========================
 
-An Open edX plugin that adds a per-block **Criterion scores** report for Open
-Response Assessments (ORAs). For a single ORA it shows a matrix of every
-enrolled learner (rows) against the rubric criteria (columns), where each cell
-is the rubric option selected on the learner's **staff** assessment
-(e.g. *Demonstrated* / *Not yet*). Learners with no submission show an em dash.
-A CSV export of the same matrix is included.
+An Open edX plugin that adds a course-wide **Assessment scores** table to the
+Instructor Dashboard **Open Responses** tab, below the native list of open
+response assessments (ORAs). The table shows every enrolled learner (rows)
+against the rubric criteria of every ORA in the course (columns), as
+percentages. A CSV export of the same table is included. No changes to
+``edx-platform`` or ``edx-ora2`` are required.
 
-The report is launched from a small "Criterion score reports" links panel that
-the plugin injects into the Instructor Dashboard **Open Responses** tab. No
-changes to ``edx-platform`` or ``edx-ora2`` are required.
+What the table shows
+--------------------
+
+* One group of columns per ORA, in course outline order. The first column of
+  each group is a shaded **Attempt Date** column with the date the learner
+  submitted (``MM/DD/YYYY``, in the viewer's browser time zone). A learner who has not submitted shows ``-``.
+* Under the date, a note says where the score came from: ``Staff score``,
+  ``Peer score`` or ``Self score``. A learner who submitted but has no score yet
+  shows ``Awaiting grade``. The note is on screen only and is not in the CSV.
+* Each criterion cell is the percent of the highest option points of that
+  criterion (a binary rubric gives 0% or 100%), with the same rounding as the
+  Auto Assessments tab in ``tutor-contrib-edl``. **Demonstrated** (green) means
+  the percent is at or above the threshold, **Not Demonstrated** (yellow) means
+  below it, and grey **No Attempt Yet** means there is no score.
+* Search by name, username or email, filter by assessment, paging and page size.
 
 How it works
 ------------
 
-* **Report page** — a standalone, staff-only Django view at
-  ``/courses/<course_id>/instructor/ora/<usage_id>/criterion_scores``
-  (append ``?format=csv`` for the download). Registered via the plugin's own
-  ``urls.py`` (mounted at the site root).
-* **Data** — enrolled learners come from ``CourseEnrollment``; the selected
-  option per criterion comes from each learner's staff ``Assessment`` in
-  ``edx-ora2`` (read through public ``openassessment`` / ``submissions`` APIs).
-* **Launch panel** — an ``InstructorDashboardRenderStarted`` filter step
-  (``ora_criterion_scores.pipeline.AddCriterionScoresPanel``) attaches a small
-  JavaScript snippet to the Open Responses section's fragment, which renders the
-  links panel client-side. Wired automatically by the plugin's settings.
+* **Table** — an ``InstructorDashboardRenderStarted`` filter step
+  (``ora_criterion_scores.pipeline.AddCriterionScoresPanel``) attaches
+  ``static/ora_scores.css`` and ``static/ora_scores.js`` to the Open Responses
+  section's fragment, which the dashboard template already emits. The script
+  builds the table's host element at the end of the section and loads the data
+  the first time the section is shown. It is only added to courses that have at
+  least one ORA. Wired automatically by the plugin's settings.
+* **Data URL** — staff-only JSON, one page of learners at a time:
+  ``/courses/<course_id>/instructor/ora_scores/data`` with the query parameters
+  ``page``, ``page_size`` (default 10, maximum 100), ``q`` and ``assessment``
+  (a block id). Reverse name ``ora_criterion_scores:data``.
+* **CSV URL** — staff-only download of every learner and every ORA:
+  ``/courses/<course_id>/instructor/ora_scores/csv``, file name
+  ``ora_assessment_scores_<course key>_<YYYY-MM-DD>.csv``. Reverse name
+  ``ora_criterion_scores:csv``.
+* **Data** — enrolled learners come from ``CourseEnrollment``. Submission dates
+  come from ``submissions.api.get_all_course_submission_information`` (the
+  ``submitted_at`` of the learner's latest live submission for the ORA). The
+  selected option per criterion comes from the learner's assessments in
+  ``edx-ora2``, read through its public APIs.
+
+CSV layout
+----------
+
+Row 1 is ``Competency`` (the course title), row 2 is ``Assessment Name``, row 3
+is ``Learner, Username, Email`` followed by the criterion names. Each ORA group
+starts with a ``Attempt Date`` column (rows 1 and 2 repeat the competency and the
+assessment name above it). Then there is one row per learner. Score cells read
+``75% (Demonstrated)``. The date cell is empty when the learner has not
+submitted.
+
+Settings
+--------
+
+``EDL_AUTO_ASSESSMENT_THRESHOLD`` is the percent at or above which a criterion
+is Demonstrated. It is the same setting the Auto Assessments tab uses, so both
+views agree. If it is absent, 75 is used.
 
 Installation
 ------------
@@ -42,31 +80,39 @@ container.
 Tests
 -----
 
-The core logic (matrix assembly and launch-panel JS in ``_matrix.py``) is
-covered by dependency-free unit tests that run with only pytest:
+The pure logic (``report.py``, the peer-median mapping in ``_matrix.py``) is
+covered by dependency-free unit tests. The data, view and pipeline tests need
+Django, ``openedx-filters`` and ``edx-opaque-keys``:
 
 .. code-block:: bash
 
-    pip install pytest
+    pip install pytest django openedx-filters edx-opaque-keys
     pytest
 
-The pipeline tests exercise the render-filter step with monkeypatched
-dependencies; ``tests/conftest.py`` stubs ``xmodule`` when running outside
-edx-platform so they run standalone too.
+``tests/conftest.py`` configures minimal Django settings and stubs the
+edx-platform modules (``xmodule``, ``lms``, ``common``, ``submissions``,
+``openassessment``, ``openedx.core``) when running outside edx-platform, so the
+suite runs standalone.
 
 Scope / assumptions
 -------------------
 
-* Cells reflect the **effective** assessment, mirroring the ORA grade page:
+* ``ora_criterion_scores/report.py`` is a copy of the helpers in
+  ``tutor-contrib-edl`` (``edl_plugin/auto_assessment_scores/report.py``), and
+  ``static/ora_scores.js`` and ``static/ora_scores.css`` are copies of that
+  plugin's ``auto_assessments.js`` and ``auto_assessments.css`` with the CSS
+  prefix ``edl-ora`` and the global ``EdlOraScores``. Keep the copies in sync.
+* Scores reflect the **effective** assessment, mirroring the ORA grade page:
   a staff assessment (including a staff override) wins; otherwise the peer
-  median mapped back to the authored option label(s) — when a median falls
-  between options, both authored labels are shown slash-joined, exactly as ORA
-  does; otherwise the self assessment. Criteria with no score on the effective
-  assessment (e.g. a peer step still awaiting reviews) are left blank.
-* No labels are hard-coded: cell text is always the authored option label, and
-  colour is derived from where the option's points fall within that
-  criterion's own range (top / bottom / middle) — so any point scale works.
+  median mapped back to the authored option; otherwise the self assessment.
+  Criteria with no score on the effective assessment (e.g. a peer step still
+  awaiting reviews) show No Attempt Yet.
+* Criteria without options (feedback only) are not columns.
 * Peer medians assume the default ``median`` grading strategy. If
   ``ENABLE_ORA_PEER_CONFIGURABLE_GRADING`` is on with a per-block strategy,
   extend ``_effective_selections`` to pass the block's peer requirements.
+* Team ORAs are not handled specially: submissions are per team member, as
+  returned by ``edx-submissions``.
+* The CSV computes the effective scores for every learner, which takes several
+  queries per submission.
 * Access is limited to users with staff-level access to the course.
