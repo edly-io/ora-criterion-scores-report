@@ -19,8 +19,8 @@ BINARY = [{"label": "Not Demonstrated", "points": 0}, {"label": "Demonstrated", 
 FOUR_LEVELS = [{"label": str(i), "points": i} for i in range(5)]
 
 
-def _criterion(name, options, order=0, label=None):
-    criterion = {"name": name, "order_num": order, "options": options, "prompt": ""}
+def _criterion(name, options, order=0, label=None, prompt=""):
+    criterion = {"name": name, "order_num": order, "options": options, "prompt": prompt}
     if label is not None:
         criterion["label"] = label
     return criterion
@@ -64,6 +64,16 @@ def test_get_columns_follows_outline_order_across_blocks(monkeypatch):
     assert [c["block_id"] for c in columns] == ["b2", "b1", "b1"]
     assert {c["competency"] for c in columns} == {"Course Title"}
     assert set(blocks_by_id) == {"b1", "b2"}
+
+
+def test_get_columns_heads_each_criterion_with_its_prompt(monkeypatch):
+    block = _ora("b1", "A", [_criterion("connection", BINARY, label="Connection", prompt="Establishes a personal connection")])
+    _store(monkeypatch, _course("Course", [block]))
+
+    columns, _blocks = data.get_columns("course-key")
+
+    assert columns[0]["criterion"] == "Establishes a personal connection"
+    assert columns[0]["criterion_name"] == "connection"
 
 
 def test_get_columns_skips_feedback_only_criterion(monkeypatch):

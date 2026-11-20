@@ -175,7 +175,7 @@ def get_columns(course_key):
                 "competency": competency,
                 "block_id": block_id,
                 "assessment": block.display_name or "Open Response Assessment",
-                "criterion": criterion.get("label") or criterion["name"],
+                "criterion": criterion.get("prompt") or criterion.get("label") or criterion["name"],
                 "criterion_name": criterion["name"],
                 "max_points": max(option["points"] for option in options),
             })
