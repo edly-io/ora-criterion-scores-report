@@ -80,7 +80,7 @@
 #open_response_assessment .edl-ora-clear,
 #open_response_assessment .edl-ora-page { box-sizing: border-box; height: 40px; margin: 0; text-transform: none; text-shadow: none; box-shadow: none; }
 #open_response_assessment .edl-ora-search { padding: 0 12px; line-height: normal; }
-#open_response_assessment .edl-ora-download { background: #111827; background-image: none; color: #fff; border: 0; font-size: 14px; font-weight: 500; text-decoration: none; }
+#open_response_assessment .edl-ora-download { margin-left: auto; background: #111827; background-image: none; color: #fff; border: 0; font-size: 14px; font-weight: 500; text-decoration: none; }
 #open_response_assessment .edl-ora-download:focus-visible { outline: 2px solid #2563EB !important; outline-offset: 2px !important; }
 
 .edl-ora-status { padding: 8px 0; color: #4B5563; font-size: 14px; }
