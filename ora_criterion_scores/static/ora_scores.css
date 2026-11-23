@@ -127,6 +127,8 @@
   color: #111827 !important;
   overflow-wrap: anywhere;
 }
+/* The assessment title stays in view beside the learner column while the table scrolls sideways. */
+.edl-ora-group-title { display: inline-block; position: sticky; left: 216px; }
 .edl-ora-criterion {
   font-size: 13px;
   font-weight: 500 !important;
@@ -207,6 +209,7 @@ thead .edl-ora-sticky { z-index: 2; vertical-align: bottom; font-size: 13px; fon
   .edl-ora-assessment { flex: 1 1 100%; min-width: 0; }
   .edl-ora-download { margin-left: 0; }
   .edl-ora-col-learner { width: 150px; }
+  .edl-ora-group-title { left: 166px; }
   .edl-ora-pager { margin-left: 0; }
 }
 
