@@ -1,13 +1,13 @@
 """
-Open edX plugin: per-block ORA "Criterion scores" report.
+Open edX plugin: course-wide ORA scores table.
 
-Adds a standalone, staff-only report page that shows, for a single Open
-Response Assessment, a matrix of enrolled learners against the rubric
-criteria (the selected option per learner per criterion), plus a CSV export.
-The report is launched from a small links panel injected into the Instructor
-Dashboard "Open Responses" tab.
+Adds a staff-only table to the Instructor Dashboard "Open Responses" tab, below
+the native list. It shows every enrolled learner against the rubric criteria of
+every Open Response Assessment in the course, as percentages (Demonstrated or
+Not Demonstrated) with the date each learner submitted, plus a CSV export. The
+table is loaded from two staff-only JSON and CSV URLs registered by this plugin.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 default_app_config = "ora_criterion_scores.apps.OraCriterionScoresConfig"

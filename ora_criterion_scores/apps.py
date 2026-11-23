@@ -8,8 +8,8 @@ class OraCriterionScoresConfig(AppConfig):
     Open edX plugin AppConfig.
 
     Registers the plugin's URLs (mounted at the site root so the full
-    ``/courses/<course_id>/instructor/ora/<usage_id>/criterion_scores`` path
-    resolves) and its settings hook (which wires the instructor-dashboard
+    ``/courses/<course_id>/instructor/ora_scores/data`` and ``.../csv`` paths
+    resolve) and its settings hook (which wires the instructor-dashboard
     render filter). Uses raw string keys instead of the
     ``PluginURLs``/``PluginSettings`` constants so the package imports cleanly
     without a hard dependency on a specific edx-platform module path.
