@@ -202,7 +202,7 @@ def test_get_cells_staff_scored_learner(cells_env):
     cells, dates = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75)
 
     assert cells[1] == [{"percent": 100, "status": "demonstrated"}, {"percent": 0, "status": "not_demonstrated"}]
-    assert dates[1] == {"b1": {"date": "10/20/2026", "note": "Staff score"}}
+    assert dates[1] == {"b1": {"date": "Oct 20, 2026", "note": "Staff score"}}
 
 
 def test_get_cells_percent_uses_highest_option_points(cells_env):
@@ -241,7 +241,7 @@ def test_get_cells_submitted_not_scored(cells_env):
     cells, dates = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75)
 
     assert cells[1] == [None, None]
-    assert dates[1] == {"b1": {"date": "10/20/2026", "note": "Awaiting grade"}}
+    assert dates[1] == {"b1": {"date": "Oct 20, 2026", "note": "Awaiting grade"}}
 
 
 def test_get_cells_submitted_with_no_selection_entry(cells_env):
@@ -250,7 +250,7 @@ def test_get_cells_submitted_with_no_selection_entry(cells_env):
     cells, dates = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75)
 
     assert cells[1] == [None, None]
-    assert dates[1]["b1"] == {"date": "10/20/2026", "note": "Awaiting grade"}
+    assert dates[1]["b1"] == {"date": "Oct 20, 2026", "note": "Awaiting grade"}
 
 
 def test_get_cells_selection_without_points_is_no_score(cells_env):
@@ -281,9 +281,9 @@ def test_get_cells_writes_dates_in_the_browser_zone(cells_env):
     _, honolulu = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75, "Pacific/Honolulu")
     _, bad_zone = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75, "Nope/Nope")
 
-    assert utc_dates[1]["b1"]["date"] == "10/20/2026"
-    assert honolulu[1]["b1"]["date"] == "10/19/2026"
-    assert bad_zone[1]["b1"]["date"] == "10/20/2026"
+    assert utc_dates[1]["b1"]["date"] == "Oct 20, 2026"
+    assert honolulu[1]["b1"]["date"] == "Oct 19, 2026"
+    assert bad_zone[1]["b1"]["date"] == "Oct 20, 2026"
 
 
 def test_get_cells_later_submission_wins(cells_env):
@@ -299,7 +299,7 @@ def test_get_cells_later_submission_wins(cells_env):
     cells, dates = data.get_cells(_columns(), cells_env.blocks, _users(1), "course-key", 75)
 
     assert cells[1][0] == {"percent": 100, "status": "demonstrated"}
-    assert dates[1]["b1"]["date"] == "10/23/2026"
+    assert dates[1]["b1"]["date"] == "Oct 23, 2026"
     assert cells_env.calls == [("b1", ["later"])]
 
 
@@ -333,6 +333,157 @@ def test_get_cells_no_columns_or_users(cells_env):
     assert data.get_cells([], cells_env.blocks, _users(1), "course-key", 75) == ({1: []}, {1: {}})
     assert data.get_cells(_columns(), cells_env.blocks, [], "course-key", 75) == ({}, {})
     assert cells_env.calls == []
+
+
+def test_get_cells_uses_preloaded_submissions_without_calling_the_api(cells_env, monkeypatch):
+    def _boom(course_id, item_type):
+        raise AssertionError("course-wide submissions call must be skipped")
+
+    monkeypatch.setattr(data.sub_api, "get_all_course_submission_information", _boom)
+    cells_env.selected = {"sub-1": {"c1": _selection(1, "staff"), "c2": _selection(0, "staff")}}
+    preloaded = {("anon-1", "b1"): {"uuid": "sub-1", "submitted_at": BASE}}
+
+    cells, dates = data.get_cells(
+        _columns(), cells_env.blocks, _users(1), "course-key", 75, submissions=preloaded,
+    )
+
+    assert cells[1][0] == {"percent": 100, "status": "demonstrated"}
+    assert dates[1]["b1"]["date"] == "Oct 20, 2026"
+
+
+def test_get_cells_without_submissions_argument_makes_one_api_call(cells_env, monkeypatch):
+    calls = _submissions_api(monkeypatch, [_submission("anon-1", "b1", "sub-1", BASE)])
+
+    data.get_cells(_columns("b1") + _columns("b2", "Pitch", ("c1",)), cells_env.blocks, _users(1), "k", 75)
+
+    assert calls == [("k", "openassessment")]
+
+
+# --- filter_columns ----------------------------------------------------------
+
+def test_filter_columns_empty_or_none_returns_all():
+    columns = _columns("b1") + _columns("b2", "Pitch", ("c1",))
+    assert data.filter_columns(columns, "") == columns
+    assert data.filter_columns(columns, None) == columns
+    assert data.filter_columns(columns) == columns
+
+
+def test_filter_columns_one_block_keeps_only_its_criteria():
+    columns = _columns("b1") + _columns("b2", "Pitch", ("c1",))
+    assert [c["block_id"] for c in data.filter_columns(columns, "b1")] == ["b1", "b1"]
+
+
+def test_filter_columns_unknown_block_returns_none():
+    assert data.filter_columns(_columns("b1"), "nope") == []
+
+
+# --- get_attempt_counts ------------------------------------------------------
+
+@pytest.fixture
+def counts_env(monkeypatch):
+    """Patch the enrollee count, the anonymous id table and the submissions API."""
+    env = SimpleNamespace(total=3, anon_ids=["anon-1", "anon-2", "anon-3"], rows=[], filters=[], api_calls=[])
+
+    class _Queryset:
+        def __init__(self, values):
+            self.values = values
+
+        def values_list(self, field, flat=False):
+            assert (field, flat) == ("anonymous_user_id", True)
+            return iter(self.values)
+
+    class _Manager:
+        def filter(self, **kwargs):
+            env.filters.append(kwargs)
+            return _Queryset(env.anon_ids)
+
+    monkeypatch.setattr(
+        data, "learners_queryset", lambda course_key, query=None: SimpleNamespace(count=lambda: env.total),
+    )
+    models = pytest.importorskip("common.djangoapps.student.models")
+    monkeypatch.setattr(models, "AnonymousUserId", SimpleNamespace(objects=_Manager()), raising=False)
+
+    def api(course_id, item_type):
+        env.api_calls.append((course_id, item_type))
+        return iter(env.rows)
+
+    monkeypatch.setattr(data.sub_api, "get_all_course_submission_information", api)
+    return env
+
+
+def test_attempt_counts_none_attempted(counts_env):
+    assert data.get_attempt_counts(_columns("b1"), "k") == ({"b1": 0}, 3)
+
+
+def test_attempt_counts_learner_with_several_criteria_counts_once_per_block(counts_env):
+    counts_env.rows = [_submission("anon-1", "b1", "s1", BASE)]
+    counts, total = data.get_attempt_counts(_columns("b1", criteria=("c1", "c2", "c3")), "k")
+    assert (counts, total) == ({"b1": 1}, 3)
+
+
+def test_attempt_counts_are_per_block(counts_env):
+    counts_env.rows = [
+        _submission("anon-1", "b1", "s1", BASE), _submission("anon-2", "b1", "s2", BASE),
+        _submission("anon-1", "b2", "s3", BASE),
+    ]
+    columns = _columns("b1") + _columns("b2", "Pitch", ("c1",))
+    assert data.get_attempt_counts(columns, "k")[0] == {"b1": 2, "b2": 1}
+
+
+def test_attempt_counts_deleted_submission_is_not_counted(counts_env):
+    # The submissions API leaves out deleted submissions, so anon-2 has no row.
+    counts_env.rows = [_submission("anon-1", "b1", "s1", BASE)]
+    assert data.get_attempt_counts(_columns("b1"), "k")[0] == {"b1": 1}
+
+
+def test_attempt_counts_ignore_users_who_are_not_enrolled(counts_env):
+    counts_env.rows = [_submission("anon-1", "b1", "s1", BASE), _submission("anon-gone", "b1", "s9", BASE)]
+    assert data.get_attempt_counts(_columns("b1"), "k")[0] == {"b1": 1}
+
+
+def test_attempt_counts_awaiting_grade_submission_counts(counts_env):
+    counts_env.rows = [_submission("anon-1", "b1", "ungraded", BASE)]   # score is {} (not graded)
+    assert data.get_attempt_counts(_columns("b1"), "k")[0] == {"b1": 1}
+
+
+def test_attempt_counts_ignore_blocks_that_are_not_columns(counts_env):
+    counts_env.rows = [_submission("anon-1", "other", "s1", BASE)]
+    assert data.get_attempt_counts(_columns("b1"), "k")[0] == {"b1": 0}
+
+
+def test_attempt_counts_no_enrollees_skips_submissions_and_id_queries(counts_env):
+    counts_env.total = 0
+    counts_env.rows = [_submission("anon-1", "b1", "s1", BASE)]
+    assert data.get_attempt_counts(_columns("b1"), "k") == ({"b1": 0}, 0)
+    assert counts_env.api_calls == []
+    assert counts_env.filters == []
+
+
+def test_attempt_counts_no_columns_makes_no_calls(counts_env):
+    assert data.get_attempt_counts([], "k") == ({}, 3)
+    assert counts_env.api_calls == []
+    assert counts_env.filters == []
+
+
+def test_attempt_counts_preloaded_submissions_skip_the_api(counts_env):
+    preloaded = {("anon-1", "b1"): {"uuid": "s1", "submitted_at": BASE},
+                 ("anon-2", "b1"): {"uuid": "s2", "submitted_at": BASE}}
+    assert data.get_attempt_counts(_columns("b1"), "k", preloaded) == ({"b1": 2}, 3)
+    assert counts_env.api_calls == []
+
+
+def test_attempt_counts_without_preloaded_submissions_make_one_api_call(counts_env):
+    data.get_attempt_counts(_columns("b1") + _columns("b2", "Pitch", ("c1",)), "k")
+    assert counts_env.api_calls == [("k", "openassessment")]
+
+
+def test_attempt_counts_enrolled_ids_are_limited_to_active_enrollees_of_the_course(counts_env):
+    data.get_attempt_counts(_columns("b1"), "the-course")
+    assert counts_env.filters == [{
+        "course_id": "the-course",
+        "user__courseenrollment__course_id": "the-course",
+        "user__courseenrollment__is_active": True,
+    }]
 
 
 # --- _effective_selections ---------------------------------------------------

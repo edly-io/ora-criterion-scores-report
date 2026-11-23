@@ -41,6 +41,11 @@ def _tz_param(request):
     return request.GET.get("tz", "").strip()
 
 
+def _filter_params(request):
+    """Return ``(q, assessment)`` from the query string: a search text and a block id, each ``""`` if absent."""
+    return request.GET.get("q", "").strip(), request.GET.get("assessment", "").strip()
+
+
 def _int_param(request, name, default, minimum=1, maximum=None):
     """Return an integer query param, clamped to ``[minimum, maximum]``, or ``default`` if invalid."""
     try:
@@ -60,32 +65,42 @@ def ora_scores_data(request, course_id):
     Query params: ``page`` (default 1), ``page_size`` (default 10, max 100),
     ``q`` (name, username or email), ``assessment`` (a block id, limits the columns)
     and ``tz`` (the browser's IANA time zone, dates are written in it, UTC if missing).
+
+    Each ``assessments`` item carries ``attempted`` and ``total``: the learners with
+    a submission and all active enrollees, over the whole course (``q`` and
+    ``assessment`` do not change them).
     """
     course_key = _course_key_for_staff(request, course_id)
     threshold = data.threshold()
 
     page_size = _int_param(request, "page_size", DEFAULT_PAGE_SIZE, maximum=MAX_PAGE_SIZE)
     page = _int_param(request, "page", 1)
-    query = request.GET.get("q", "").strip()
-    assessment = request.GET.get("assessment", "").strip()
+    query, assessment = _filter_params(request)
     tz = _tz_param(request)
 
     all_columns, blocks_by_id = data.get_columns(course_key)
-    assessments = []
+    # One course-wide submissions call serves both the dropdown counts and the page cells.
+    submissions = data.get_submissions(course_key, {c["block_id"] for c in all_columns}) if all_columns else {}
+    attempted, enrolled = data.get_attempt_counts(all_columns, course_key, submissions)
+    assessments = {}
     for column in all_columns:
-        if column["block_id"] not in [a["id"] for a in assessments]:
-            assessments.append({"id": column["block_id"], "name": column["assessment"]})
-    columns = [c for c in all_columns if c["block_id"] == assessment] if assessment else all_columns
+        assessments.setdefault(column["block_id"], {
+            "id": column["block_id"],
+            "name": column["assessment"],
+            "attempted": attempted.get(column["block_id"], 0),
+            "total": enrolled,
+        })
+    columns = data.filter_columns(all_columns, assessment)
 
     learners = data.learners_queryset(course_key, query)
     total = learners.count()
     num_pages = max(1, -(-total // page_size))
     page = min(page, num_pages)
     page_users = list(learners[(page - 1) * page_size:page * page_size])
-    cells, dates = data.get_cells(columns, blocks_by_id, page_users, course_key, threshold, tz)
+    cells, dates = data.get_cells(columns, blocks_by_id, page_users, course_key, threshold, tz, submissions)
 
     return JsonResponse({
-        "assessments": assessments,
+        "assessments": list(assessments.values()),
         "columns": [
             {
                 "competency": c["competency"],

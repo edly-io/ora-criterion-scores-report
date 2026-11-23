@@ -1,7 +1,7 @@
 ORA Criterion Scores Report
 ===========================
 
-An Open edX plugin that adds a course-wide **Assessment scores** table to the
+An Open edX plugin that adds a course-wide **Open response scores** table to the
 Instructor Dashboard **Open Responses** tab, below the native list of open
 response assessments (ORAs). The table shows every enrolled learner (rows)
 against the rubric criteria of every ORA in the course (columns), as
@@ -11,18 +11,30 @@ percentages. A CSV export of the same table is included. No changes to
 What the table shows
 --------------------
 
+* A heading ``Open response scores for <course name>`` and one line saying what
+  the table shows and the Demonstrated threshold.
 * One group of columns per ORA, in course outline order. The first column of
-  each group is a shaded **Attempt Date** column with the date the learner
-  submitted (``MM/DD/YYYY``, in the viewer's browser time zone). A learner who has not submitted shows ``-``.
+  each group is an **Attempt date** column with the date the learner
+  submitted (for example ``Oct 20, 2026``, in the viewer's browser time zone).
 * Under the date, a note says where the score came from: ``Staff score``,
   ``Peer score`` or ``Self score``. A learner who submitted but has no score yet
-  shows ``Awaiting grade``. The note is on screen only and is not in the CSV.
+  shows ``Awaiting grade`` under the date and one merged ``Awaiting grade`` cell
+  across the criteria of that ORA. The note is on screen only and is not in the CSV.
+* A learner who has not submitted an ORA gets one merged ``No attempt yet``
+  cell across the whole group. Inside a graded ORA, a criterion without a score
+  also says ``No attempt yet``.
 * Each criterion cell is the percent of the highest option points of that
   criterion (a binary rubric gives 0% or 100%), with the same rounding as the
   Auto Assessments tab in ``tutor-contrib-edl``. **Demonstrated** (green) means
-  the percent is at or above the threshold, **Not Demonstrated** (yellow) means
-  below it, and grey **No Attempt Yet** means there is no score.
-* Search by name, username or email, filter by assessment, paging and page size.
+  the percent is at or above the threshold, **Not demonstrated** (orange) means
+  below it.
+* One toolbar row: search by name, username or email, an **Assessment**
+  dropdown (``<name> (X of Y attempted)``, counted over every enrolled learner,
+  not only the current page or search), and a **Download CSV** button. **Clear
+  filters** shows while a search is active. A line shows ``Showing X of Y
+  learners``, and a search without results shows ``No learners match``.
+* Paging and page size. Inter is loaded from Google Fonts at runtime and falls
+  back to the system font if it is blocked.
 
 How it works
 ------------
@@ -37,8 +49,11 @@ How it works
 * **Data URL** — staff-only JSON, one page of learners at a time:
   ``/courses/<course_id>/instructor/ora_scores/data`` with the query parameters
   ``page``, ``page_size`` (default 10, maximum 100), ``q`` and ``assessment``
-  (a block id). Reverse name ``ora_criterion_scores:data``.
-* **CSV URL** — staff-only download of every learner and every ORA:
+  (a block id). Each ``assessments`` item has ``id``, ``name``, ``attempted``
+  (learners with a live submission) and ``total`` (active enrollees), both over
+  the whole course. Reverse name ``ora_criterion_scores:data``.
+* **CSV URL** — staff-only download of every learner and every ORA (the
+  ``tz`` parameter sets the time zone of the dates):
   ``/courses/<course_id>/instructor/ora_scores/csv``, file name
   ``ora_assessment_scores_<course key>_<YYYY-MM-DD>.csv``. Reverse name
   ``ora_criterion_scores:csv``.
@@ -56,7 +71,8 @@ is ``Learner, Username, Email`` followed by the criterion names. Each ORA group
 starts with a ``Attempt Date`` column (rows 1 and 2 repeat the competency and the
 assessment name above it). Then there is one row per learner. Score cells read
 ``75% (Demonstrated)``. The date cell is empty when the learner has not
-submitted.
+submitted. Dates read like ``Oct 20, 2026`` and statuses like
+``40% (Not demonstrated)``.
 
 Settings
 --------
@@ -106,7 +122,7 @@ Scope / assumptions
   a staff assessment (including a staff override) wins; otherwise the peer
   median mapped back to the authored option; otherwise the self assessment.
   Criteria with no score on the effective assessment (e.g. a peer step still
-  awaiting reviews) show No Attempt Yet.
+  awaiting reviews) show ``No attempt yet``.
 * Criteria without options (feedback only) are not columns.
 * Peer medians assume the default ``median`` grading strategy. If
   ``ENABLE_ORA_PEER_CONFIGURABLE_GRADING`` is on with a per-block strategy,

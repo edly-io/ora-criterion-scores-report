@@ -182,6 +182,13 @@ def get_columns(course_key):
     return columns, blocks_by_id
 
 
+def filter_columns(columns, assessment=None):
+    """Return the columns of the block id ``assessment``, or all columns if it is empty. An unknown id gives none."""
+    if not assessment:
+        return columns
+    return [c for c in columns if c["block_id"] == assessment]
+
+
 def learners_queryset(course_key, query=None):
     """Return active enrollees ordered by username, optionally filtered by name, username or email."""
     users = User.objects.filter(
@@ -224,7 +231,44 @@ def _note_for(selections):
     return _NOTE_BY_SOURCE.get(next(iter(selections.values()))["source"], "")
 
 
-def get_cells(columns, blocks_by_id, users, course_key, current_threshold, tz=None):
+def get_attempt_counts(columns, course_key, submissions=None):
+    """
+    Return ``({block_id: attempted}, total)`` across every active enrollee of the course.
+
+    ``attempted`` is the number of learners with a live (not deleted) submission
+    for the block, graded or not, the same rule that gives a learner an Attempt
+    Date in ``get_cells``. ``total`` is the number of active enrollees. Search and
+    assessment filters never apply, so the numbers describe the whole course.
+
+    ``submissions`` is the result of ``get_submissions`` for the blocks of
+    ``columns``. Pass it to reuse the course-wide submissions call made for the
+    page cells. Besides that call this runs the enrollee count and one query for
+    the enrollees' anonymous ids.
+    """
+    from common.djangoapps.student.models import AnonymousUserId  # pylint: disable=import-outside-toplevel
+
+    total = learners_queryset(course_key).count()
+    counts = {column["block_id"]: 0 for column in columns}
+    if not counts or not total:
+        return counts, total
+
+    if submissions is None:
+        submissions = get_submissions(course_key, set(counts))
+    enrolled_anon_ids = set(
+        AnonymousUserId.objects.filter(
+            course_id=course_key,
+            user__courseenrollment__course_id=course_key,
+            user__courseenrollment__is_active=True,
+        ).values_list("anonymous_user_id", flat=True)
+    )
+    # Each (anonymous id, block id) key is one learner, so counting keys counts learners.
+    for anon_id, block_id in submissions:
+        if block_id in counts and anon_id in enrolled_anon_ids:
+            counts[block_id] += 1
+    return counts, total
+
+
+def get_cells(columns, blocks_by_id, users, course_key, current_threshold, tz=None, submissions=None):
     """
     Return ``(cells, dates)`` for ``users``.
 
@@ -232,7 +276,9 @@ def get_cells(columns, blocks_by_id, users, course_key, current_threshold, tz=No
     (``None`` when the learner did not submit or the criterion has no score).
     ``dates`` is ``{user.id: {block_id: {"date", "note"}}}``, with a key only for
     blocks the learner submitted. Effective scores are resolved once per block
-    and only for the submissions of ``users``.
+    and only for the submissions of ``users``. ``submissions`` is an optional
+    ``get_submissions`` result covering the blocks of ``columns``, to avoid a second
+    course-wide call.
     """
     users = list(users)
     cells = {user.id: [None] * len(columns) for user in users}
@@ -242,7 +288,8 @@ def get_cells(columns, blocks_by_id, users, course_key, current_threshold, tz=No
 
     anon_by_user = {user.id: anonymous_id_for_user(user, course_key) for user in users}
     block_ids = {column["block_id"] for column in columns}
-    submissions = get_submissions(course_key, block_ids)
+    if submissions is None:
+        submissions = get_submissions(course_key, block_ids)
 
     for block_id in dict.fromkeys(column["block_id"] for column in columns):
         block_submissions = {

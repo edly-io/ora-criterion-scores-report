@@ -19,7 +19,7 @@ STATUS_DEMONSTRATED = "demonstrated"
 STATUS_NOT_DEMONSTRATED = "not_demonstrated"
 STATUS_LABELS = {
     STATUS_DEMONSTRATED: "Demonstrated",
-    STATUS_NOT_DEMONSTRATED: "Not Demonstrated",
+    STATUS_NOT_DEMONSTRATED: "Not demonstrated",
 }
 
 DEFAULT_THRESHOLD = 75
@@ -29,6 +29,9 @@ NOTE_STAFF = "Staff score"
 NOTE_PEER = "Peer score"
 NOTE_SELF = "Self score"
 NOTE_AWAITING = "Awaiting grade"
+
+# Fixed so the text does not depend on the server locale (``%b``) or platform (``%-d``).
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 def percent(score_given, score_maximum):
@@ -61,7 +64,7 @@ def make_cell(score_given, score_maximum, threshold):
 
 
 def cell_text(cell):
-    """Return the CSV text for a cell: ``87% (Demonstrated)`` or an empty string."""
+    """Return the CSV text for a cell: ``87% (Demonstrated)``, ``40% (Not demonstrated)`` or an empty string."""
     if cell is None:
         return ""
     return "{}% ({})".format(cell["percent"], STATUS_LABELS[cell["status"]])
@@ -85,15 +88,17 @@ def resolve_zone(name):
 
 def format_date(value, tz=None):
     """
-    Return ``value`` as ``MM/DD/YYYY`` in the zone named ``tz`` (an IANA name), or ``""`` for ``None``.
+    Return ``value`` as ``Oct 20, 2026`` in the zone named ``tz`` (an IANA name), or ``""`` for ``None``.
 
+    The month is always the English abbreviation and the day has no leading zero.
     An empty or unknown ``tz`` means UTC. Naive datetimes are treated as UTC.
     """
     if value is None:
         return ""
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(resolve_zone(tz)).strftime("%m/%d/%Y")
+    local = value.astimezone(resolve_zone(tz))
+    return "{} {}, {}".format(MONTHS[local.month - 1], local.day, local.year)
 
 
 def date_entry(date_text, note=""):

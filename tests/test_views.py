@@ -72,7 +72,7 @@ def _patch(monkeypatch):
         calls["q"] = query
         return users
 
-    def get_cells(columns, blocks_by_id, page_users, course_key, threshold):
+    def get_cells(columns, blocks_by_id, page_users, course_key, threshold, tz=None, submissions=None):
         calls["columns"] = columns
         calls["page_users"] = page_users
         calls["threshold"] = threshold
@@ -85,8 +85,10 @@ def _patch(monkeypatch):
     monkeypatch.setattr(views.data, "get_columns", lambda key: (COLUMNS, {}))
     monkeypatch.setattr(views.data, "learners_queryset", learners_queryset)
     monkeypatch.setattr(views.data, "get_cells", get_cells)
+    monkeypatch.setattr(views.data, "get_submissions", lambda course_key, block_ids: {})
+    monkeypatch.setattr(views.data, "get_attempt_counts", lambda columns, course_key, submissions=None: ({}, 23))
     monkeypatch.setattr(views.data, "threshold", lambda: 75)
-    monkeypatch.setattr(views.data, "build_report", lambda course_key: REPORT)
+    monkeypatch.setattr(views.data, "build_report", lambda course_key, tz=None: REPORT)
     return calls
 
 
@@ -128,7 +130,123 @@ def test_page_size_capped_and_invalid_values_ignored():
 def test_assessment_filter_limits_columns_but_not_dropdown():
     body = _get(assessment="b2")
     assert [c["criterion"] for c in body["columns"]] == ["C3"]
-    assert body["assessments"] == [{"id": "b1", "name": "Reflection"}, {"id": "b2", "name": "Pitch"}]
+    assert body["assessments"] == [
+        {"id": "b1", "name": "Reflection", "attempted": 0, "total": 23},
+        {"id": "b2", "name": "Pitch", "attempted": 0, "total": 23},
+    ]
+
+
+def _with_counts(monkeypatch, counts, total):
+    monkeypatch.setattr(views.data, "get_attempt_counts",
+                        lambda columns, course_key, submissions=None: (counts, total))
+
+
+def test_assessments_carry_attempted_and_total(monkeypatch):
+    _with_counts(monkeypatch, {"b1": 5, "b2": 0}, 23)
+    assert _get()["assessments"] == [
+        {"id": "b1", "name": "Reflection", "attempted": 5, "total": 23},
+        {"id": "b2", "name": "Pitch", "attempted": 0, "total": 23},
+    ]
+
+
+def test_total_counts_all_enrolled_not_the_page_or_search(monkeypatch):
+    _with_counts(monkeypatch, {"b1": 7}, 40)
+    body = _get(q="u0", page_size=5)
+    assert [a["total"] for a in body["assessments"]] == [40, 40]
+    assert body["total"] == 23   # the search result size is separate
+
+
+def test_counts_use_every_column_and_ignore_search_and_assessment(monkeypatch):
+    seen = []
+
+    def counts(columns, course_key, submissions=None):
+        seen.append([c["block_id"] for c in columns])
+        return {"b1": 4, "b2": 2}, 23
+
+    monkeypatch.setattr(views.data, "get_attempt_counts", counts)
+    body = _get(q="u01", assessment="b2")
+    assert seen == [["b1", "b1", "b2"]]
+    assert [(a["id"], a["attempted"]) for a in body["assessments"]] == [("b1", 4), ("b2", 2)]
+
+
+def test_no_columns_gives_empty_assessments_and_no_submissions_call(monkeypatch):
+    monkeypatch.setattr(views.data, "get_columns", lambda key: ([], {}))
+    monkeypatch.setattr(views.data, "get_submissions", lambda *a: pytest.fail("no columns, no call"))
+    body = _get()
+    assert body["assessments"] == [] and body["columns"] == []
+
+
+def test_same_submissions_are_passed_to_counts_and_cells(monkeypatch, _patch):
+    shared = {("anon-1", "b1"): {"uuid": "s", "submitted_at": None}}
+    monkeypatch.setattr(views.data, "get_submissions", lambda course_key, block_ids: shared)
+    passed = {}
+
+    def counts(columns, course_key, submissions=None):
+        passed["counts"] = submissions
+        return {}, 23
+
+    def cells(columns, blocks_by_id, page_users, course_key, threshold, tz=None, submissions=None):
+        passed["cells"] = submissions
+        return {u.id: [None] * len(columns) for u in page_users}, {u.id: {} for u in page_users}
+
+    monkeypatch.setattr(views.data, "get_attempt_counts", counts)
+    monkeypatch.setattr(views.data, "get_cells", cells)
+    _get()
+    assert passed["counts"] is shared and passed["cells"] is shared
+
+
+def test_submissions_requested_for_all_blocks_not_just_the_filtered_one(monkeypatch):
+    wanted = []
+    monkeypatch.setattr(views.data, "get_submissions", lambda course_key, block_ids: wanted.append(block_ids) or {})
+    _get(assessment="b2")
+    assert wanted == [{"b1", "b2"}]
+
+
+def test_one_course_wide_submissions_call_per_data_request(monkeypatch):
+    """Real get_submissions, get_attempt_counts and get_cells: the platform API is hit once."""
+    from types import SimpleNamespace
+
+    models = pytest.importorskip("common.djangoapps.student.models")
+    api_calls = []
+    rows = [
+        ({"student_id": "anon-1", "item_id": "b1"}, {"uuid": "s1", "submitted_at": None}, {}),
+        ({"student_id": "anon-2", "item_id": "b2"}, {"uuid": "s2", "submitted_at": None}, {}),
+    ]
+
+    def api(course_id, item_type):
+        api_calls.append((course_id, item_type))
+        return iter(rows)
+
+    class _Manager:
+        def filter(self, **kwargs):
+            return SimpleNamespace(values_list=lambda *a, **k: iter(["anon-1", "anon-2"]))
+
+    monkeypatch.undo()   # drop the autouse stubs, then install only what this test needs
+    monkeypatch.setattr(views, "get_course_with_access", lambda *a, **k: None)
+    monkeypatch.setattr(views.data, "get_columns", lambda key: (COLUMNS, {"b1": object(), "b2": object()}))
+    monkeypatch.setattr(views.data, "threshold", lambda: 75)
+    monkeypatch.setattr(views.data, "learners_queryset",
+                        lambda course_key, query=None: _Users([_user(1), _user(2)]))
+    monkeypatch.setattr(views.data, "anonymous_id_for_user", lambda user, key: "anon-%s" % user.id)
+    monkeypatch.setattr(views.data, "_normalized_criteria", lambda block: [])
+    monkeypatch.setattr(views.data, "_effective_selections", lambda *a, **k: {})
+    monkeypatch.setattr(views.data.sub_api, "get_all_course_submission_information", api)
+    monkeypatch.setattr(models, "AnonymousUserId", SimpleNamespace(objects=_Manager()), raising=False)
+
+    body = _get(q="u", assessment="b1")
+
+    assert len(api_calls) == 1
+    assert [(a["id"], a["attempted"], a["total"]) for a in body["assessments"]] == [
+        ("b1", 1, 2), ("b2", 1, 2),
+    ]
+
+
+def test_csv_ignores_q_and_assessment_and_forwards_tz(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(views.data, "build_report", lambda course_key, tz=None: seen.update(tz=tz) or REPORT)
+    response = views.ora_scores_csv(_request("/csv", q="x", assessment="b1", tz="Asia/Karachi"), COURSE_ID)
+    assert response.status_code == 200
+    assert seen == {"tz": "Asia/Karachi"}
 
 
 def test_query_is_passed_through(_patch):

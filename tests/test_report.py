@@ -44,7 +44,16 @@ def test_make_cell_and_cell_text():
     assert report.make_cell(1, 0, 75) is None
     assert report.cell_text(None) == ""
     assert report.cell_text(report.make_cell(3, 4, 75)) == "75% (Demonstrated)"
-    assert report.cell_text(report.make_cell(2, 4, 75)) == "50% (Not Demonstrated)"
+    assert report.cell_text(report.make_cell(2, 4, 75)) == "50% (Not demonstrated)"
+
+
+def test_status_labels_are_sentence_case():
+    assert report.STATUS_LABELS == {STATUS_DEMONSTRATED: "Demonstrated", STATUS_NOT_DEMONSTRATED: "Not demonstrated"}
+
+
+def test_csv_cell_text_uses_sentence_case_label():
+    assert report.cell_text({"percent": 40, "status": STATUS_NOT_DEMONSTRATED}) == "40% (Not demonstrated)"
+    assert "Not Demonstrated" not in report.cell_text({"percent": 40, "status": STATUS_NOT_DEMONSTRATED})
 
 
 def test_safe_prefixes_formula_characters():
@@ -55,34 +64,51 @@ def test_safe_prefixes_formula_characters():
 
 
 def test_format_date_utc_aware():
-    assert report.format_date(datetime(2026, 10, 14, 9, 30, tzinfo=timezone.utc)) == "10/14/2026"
+    assert report.format_date(datetime(2026, 10, 14, 9, 30, tzinfo=timezone.utc)) == "Oct 14, 2026"
 
 
 def test_format_date_converts_to_utc_across_midnight():
     minus_five = timezone(timedelta(hours=-5))
-    assert report.format_date(datetime(2026, 10, 14, 23, 30, tzinfo=minus_five)) == "10/15/2026"
+    assert report.format_date(datetime(2026, 10, 14, 23, 30, tzinfo=minus_five)) == "Oct 15, 2026"
 
 
 def test_format_date_naive_is_treated_as_utc():
-    assert report.format_date(datetime(2026, 1, 5, 0, 0)) == "01/05/2026"
+    assert report.format_date(datetime(2026, 1, 5, 0, 0)) == "Jan 5, 2026"
 
 
 def test_format_date_in_browser_zone_moves_the_day():
     late_utc = datetime(2026, 10, 15, 3, 30, tzinfo=timezone.utc)
-    assert report.format_date(late_utc, "UTC") == "10/15/2026"
-    assert report.format_date(late_utc, "Pacific/Honolulu") == "10/14/2026"
-    assert report.format_date(late_utc, "Asia/Karachi") == "10/15/2026"
-    assert report.format_date(datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc), "Asia/Karachi") == "10/16/2026"
+    assert report.format_date(late_utc, "UTC") == "Oct 15, 2026"
+    assert report.format_date(late_utc, "Pacific/Honolulu") == "Oct 14, 2026"
+    assert report.format_date(late_utc, "Asia/Karachi") == "Oct 15, 2026"
+    assert report.format_date(datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc), "Asia/Karachi") == "Oct 16, 2026"
 
 
 def test_format_date_naive_value_with_zone_is_read_as_utc():
-    assert report.format_date(datetime(2026, 10, 15, 3, 30), "Pacific/Honolulu") == "10/14/2026"
+    assert report.format_date(datetime(2026, 10, 15, 3, 30), "Pacific/Honolulu") == "Oct 14, 2026"
 
 
 def test_format_date_unknown_or_empty_zone_falls_back_to_utc():
     value = datetime(2026, 10, 15, 3, 30, tzinfo=timezone.utc)
     for bad in (None, "", "Not/AZone", "../etc/passwd", "x" * 200, 5):
-        assert report.format_date(value, bad) == "10/15/2026"
+        assert report.format_date(value, bad) == "Oct 15, 2026"
+
+
+def test_format_date_has_no_leading_zero_on_the_day():
+    assert report.format_date(datetime(2026, 10, 5, 9, 0, tzinfo=timezone.utc)) == "Oct 5, 2026"
+    assert report.format_date(datetime(2026, 10, 20, 9, 0, tzinfo=timezone.utc)) == "Oct 20, 2026"
+
+
+def test_format_date_december_and_all_month_names():
+    assert report.format_date(datetime(2026, 12, 31, 9, 0, tzinfo=timezone.utc)) == "Dec 31, 2026"
+    names = [report.format_date(datetime(2026, month, 1, 12, 0, tzinfo=timezone.utc)).split()[0]
+             for month in range(1, 13)]
+    assert names == ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def test_format_date_zone_can_move_the_year():
+    new_year_utc = datetime(2027, 1, 1, 2, 0, tzinfo=timezone.utc)
+    assert report.format_date(new_year_utc, "Pacific/Honolulu") == "Dec 31, 2026"
 
 
 def test_format_date_none_is_empty():
@@ -139,7 +165,7 @@ def test_build_rows_two_assessments():
         "Learner", "Username", "Email", "Attempt Date", "Criterion 1", "Criterion 2", "Attempt Date", "Clarity",
     ]
     assert rows[3] == [
-        "Syed Sajjad", "sajjad", "s@example.com", "10/20/2026", "100% (Demonstrated)", "0% (Not Demonstrated)", "", "",
+        "Syed Sajjad", "sajjad", "s@example.com", "10/20/2026", "100% (Demonstrated)", "0% (Not demonstrated)", "", "",
     ]
     assert rows[4] == ["Sidra", "sidra", "sidra@example.com", "", "", "", "10/23/2026", ""]
     assert rows[5] == ["admin", "admin", "admin@example.com", "", "", "", "", ""]
