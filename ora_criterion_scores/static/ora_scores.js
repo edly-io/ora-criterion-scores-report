@@ -219,7 +219,8 @@
     row1.appendChild(learnerHead);
 
     blocks.forEach(function (block) {
-      var group = el('th', 'edl-ora-group', block.name);
+      var group = el('th', 'edl-ora-group');
+      group.appendChild(el('span', 'edl-ora-group-title', block.name));
       group.colSpan = block.count + 1;  // plus the "Attempt date" column
       group.scope = 'colgroup';
       row1.appendChild(group);
